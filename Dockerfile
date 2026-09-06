@@ -2,10 +2,10 @@ FROM eclipse-temurin:26-jdk AS build
 
 WORKDIR /app
 
-COPY pom.xml .
-COPY src ./src
+COPY . .
 
-RUN mvn clean package -DskipTests
+RUN chmod +x mvnw
+RUN ./mvnw clean package -DskipTests
 
 FROM eclipse-temurin:26-jre
 
