@@ -32,6 +32,18 @@ public class VoterController {
     public List<Voter> getAllVoters() {
         return voterRepository.findAll();
     }
+    @GetMapping("/login")
+    public String login(String voterId) {
+
+        Voter voter = voterRepository.findByVoterId(voterId)
+                .orElse(null);
+
+        if (voter == null) {
+            return "Voter not found!";
+        }
+
+        return "Login successful!";
+    }
 
     @PostMapping
     public Voter addVoter(@RequestBody Voter voter) {
