@@ -1,18 +1,26 @@
 package com.example.voting_system.controller;
 
+import java.time.LocalDateTime;
 import java.util.List;
+
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.example.voting_system.entity.Candidate;
 import com.example.voting_system.entity.Voter;
+import com.example.voting_system.entity.vote;
+
 import com.example.voting_system.repository.CandidateRepository;
 import com.example.voting_system.repository.VoterRepository;
+import com.example.voting_system.repository.VoteRepository;
 
 @RestController
 @CrossOrigin(origins = "*")
@@ -21,61 +29,185 @@ public class VoterController {
 
     private final VoterRepository voterRepository;
     private final CandidateRepository candidateRepository;
+    private final VoteRepository voteRepository;
 
-    public VoterController(VoterRepository voterRepository,
-                           CandidateRepository candidateRepository) {
+    public VoterController(
+            VoterRepository voterRepository,
+            CandidateRepository candidateRepository,
+            VoteRepository voteRepository) {
+
         this.voterRepository = voterRepository;
         this.candidateRepository = candidateRepository;
+        this.voteRepository = voteRepository;
     }
 
+    // Get all voters
     @GetMapping
     public List<Voter> getAllVoters() {
         return voterRepository.findAll();
     }
-    @GetMapping("/login")
-    public String login(String voterId) {
 
-        Voter voter = voterRepository.findByVoterId(voterId)
+    // Voter login
+    @GetMapping("/login")
+    public ResponseEntity<String> login(
+            @RequestParam("voterId") String voterId) {
+
+        if (voterId == null || voterId.trim().isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body("Please enter Voter ID.");
+        }
+
+        String id = voterId.trim().toUpperCase();
+
+        Voter voter = voterRepository.findByVoterId(id)
                 .orElse(null);
 
         if (voter == null) {
-            return "Voter not found!";
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Voter ID is not registered.");
         }
-
-        return "Login successful!";
-    }
-
-    @PostMapping
-    public Voter addVoter(@RequestBody Voter voter) {
-        return voterRepository.save(voter);
-    }
-
-    @PostMapping("/vote")
-    public String vote(@RequestBody VoteRequest request) {
-
-        Voter voter = voterRepository.findByVoterId(request.voterId)
-                .orElseThrow(() -> new RuntimeException("Voter not found"));
 
         if (voter.isHasVoted()) {
-            return "You have already voted!";
+            return ResponseEntity.ok(
+                    "You have already voted.");
         }
 
-        Candidate candidate = candidateRepository.findById(request.candidateId)
-                .orElseThrow(() -> new RuntimeException("Candidate not found"));
-
-        candidate.setVotes(candidate.getVotes() + 1);
-        voter.setHasVoted(true);
-
-        candidateRepository.save(candidate);
-        voterRepository.save(voter);
-
-        return "Vote submitted successfully!";
+        return ResponseEntity.ok(
+                "Login successful. You can vote.");
     }
 
-    public static class VoteRequest {
+    // Register voter
+    @PostMapping
+    public ResponseEntity<?> addVoter(
+            @RequestBody Voter voter) {
 
+        if (voter == null
+                || voter.getVoterId() == null
+                || voter.getVoterId().trim().isEmpty()) {
+
+            return ResponseEntity.badRequest()
+                    .body("Voter ID is required.");
+        }
+
+        String id = voter.getVoterId().trim().toUpperCase();
+
+        // Basic format validation
+        if (!id.matches("^[A-Z]{3}[0-9]{7}$")) {
+            return ResponseEntity.badRequest()
+                    .body("Invalid format. Enter 3 letters followed by 7 digits.");
+        }
+
+        if (voterRepository.findByVoterId(id).isPresent()) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("Voter ID already registered.");
+        }
+
+        voter.setVoterId(id);
+        voter.setHasVoted(false);
+
+        Voter savedVoter = voterRepository.save(voter);
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(savedVoter);
+    }
+
+    // Cast vote
+    @Transactional
+    @PostMapping("/vote")
+    public ResponseEntity<String> castVote(
+            @RequestBody VoteRequest request) {
+
+        if (request == null
+                || request.voterId == null
+                || request.voterId.trim().isEmpty()
+                || request.candidateId == null) {
+
+            return ResponseEntity.badRequest()
+                    .body("Voter ID and Candidate ID are required.");
+        }
+
+        String id = request.voterId.trim().toUpperCase();
+
+        Voter voter = voterRepository.findByVoterId(id)
+                .orElse(null);
+
+        if (voter == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Voter is not registered.");
+        }
+
+        if (voter.isHasVoted()
+                || voteRepository.existsByVoter(voter)) {
+
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("You have already voted.");
+        }
+
+        Candidate candidate = candidateRepository
+                .findById(request.candidateId)
+                .orElse(null);
+
+        if (candidate == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body("Candidate not found.");
+        }
+
+        // Save voting history
+        vote record = new vote(voter, candidate);
+        record.setVotedAt(LocalDateTime.now());
+
+        voteRepository.save(record);
+
+        // Update candidate vote count
+        candidate.setVotes(candidate.getVotes() + 1);
+        candidateRepository.save(candidate);
+
+        // Update voter status
+        voter.setHasVoted(true);
+        voterRepository.save(voter);
+
+        return ResponseEntity.ok(
+                "Your vote has been submitted successfully.");
+    }
+
+    // Vote request data
+    public static class VoteRequest {
         public String voterId;
         public Long candidateId;
+    }
+ // Get all vote records
+    @GetMapping("/vote-records")
+    public List<vote> getAllVoteRecords() {
+        return voteRepository.findAll();
+    }
+ // Reset all votes
+    @Transactional
+    @PostMapping("/reset-election")
+    public ResponseEntity<String> resetElection() {
 
+        // Step 1: Delete all old vote records
+        voteRepository.deleteAllInBatch();
+
+        // Step 2: Reset all candidate vote counts
+        List<Candidate> candidates = candidateRepository.findAll();
+
+        for (Candidate candidate : candidates) {
+            candidate.setVotes(0);
+        }
+
+        candidateRepository.saveAll(candidates);
+
+        // Step 3: Allow registered voters to vote again
+        List<Voter> voters = voterRepository.findAll();
+
+        for (Voter voter : voters) {
+            voter.setHasVoted(false);
+        }
+
+        voterRepository.saveAll(voters);
+
+        return ResponseEntity.ok(
+            "Election reset successfully. All votes have been cleared."
+        );
     }
 }
