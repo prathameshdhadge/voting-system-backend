@@ -1,3 +1,4 @@
+
 package com.example.voting_system.controller;
 
 import java.time.LocalDateTime;
@@ -7,6 +8,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -91,12 +93,13 @@ public class VoterController {
 
         String id = voter.getVoterId().trim().toUpperCase();
 
-        // Basic format validation
+        // Validate Voter ID format: ABC1234567
         if (!id.matches("^[A-Z]{3}[0-9]{7}$")) {
             return ResponseEntity.badRequest()
                     .body("Invalid format. Enter 3 letters followed by 7 digits.");
         }
 
+        // Check duplicate Voter ID
         if (voterRepository.findByVoterId(id).isPresent()) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body("Voter ID already registered.");
@@ -136,6 +139,7 @@ public class VoterController {
                     .body("Voter is not registered.");
         }
 
+        // Prevent duplicate voting
         if (voter.isHasVoted()
                 || voteRepository.existsByVoter(voter)) {
 
@@ -162,7 +166,7 @@ public class VoterController {
         candidate.setVotes(candidate.getVotes() + 1);
         candidateRepository.save(candidate);
 
-        // Update voter status
+        // Mark voter as voted
         voter.setHasVoted(true);
         voterRepository.save(voter);
 
@@ -175,20 +179,22 @@ public class VoterController {
         public String voterId;
         public Long candidateId;
     }
- // Get all vote records
+
+    // Get all vote records
     @GetMapping("/vote-records")
     public List<vote> getAllVoteRecords() {
         return voteRepository.findAll();
     }
- // Reset all votes
+
+    // Reset election: clear votes but keep registered voters
     @Transactional
     @PostMapping("/reset-election")
     public ResponseEntity<String> resetElection() {
 
-        // Step 1: Delete all old vote records
+        // Delete all voting history
         voteRepository.deleteAllInBatch();
 
-        // Step 2: Reset all candidate vote counts
+        // Reset candidate vote counts
         List<Candidate> candidates = candidateRepository.findAll();
 
         for (Candidate candidate : candidates) {
@@ -197,7 +203,7 @@ public class VoterController {
 
         candidateRepository.saveAll(candidates);
 
-        // Step 3: Allow registered voters to vote again
+        // Allow registered voters to vote again
         List<Voter> voters = voterRepository.findAll();
 
         for (Voter voter : voters) {
@@ -207,7 +213,33 @@ public class VoterController {
         voterRepository.saveAll(voters);
 
         return ResponseEntity.ok(
-            "Election reset successfully. All votes have been cleared."
+                "Election reset successfully. All votes have been cleared."
+        );
+    }
+
+    // Delete all voters, voting records and reset candidate votes
+    @Transactional
+    @DeleteMapping("/delete-all")
+    public ResponseEntity<String> deleteAllVoters() {
+
+        // Step 1: Delete voting records first
+        voteRepository.deleteAllInBatch();
+
+        // Step 2: Reset candidate vote counts
+        List<Candidate> candidates = candidateRepository.findAll();
+
+        for (Candidate candidate : candidates) {
+            candidate.setVotes(0);
+        }
+
+        candidateRepository.saveAll(candidates);
+
+        // Step 3: Delete all registered voters
+        voterRepository.deleteAllInBatch();
+
+        return ResponseEntity.ok(
+                "All voters and voting records have been deleted successfully."
         );
     }
 }
+
