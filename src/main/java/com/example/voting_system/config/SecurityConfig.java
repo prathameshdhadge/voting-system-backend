@@ -1,4 +1,3 @@
-
 package com.example.voting_system.config;
 
 import org.springframework.beans.factory.annotation.Value;
@@ -13,6 +12,11 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.web.cors.CorsConfiguration;
+import org.springframework.web.cors.CorsConfigurationSource;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+
+import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -41,52 +45,75 @@ public class SecurityConfig {
     }
 
     @Bean
+    public CorsConfigurationSource corsConfigurationSource() {
+
+        CorsConfiguration configuration = new CorsConfiguration();
+
+        configuration.setAllowedOriginPatterns(List.of("*"));
+
+        configuration.setAllowedMethods(
+                List.of("GET", "POST", "PUT", "DELETE", "OPTIONS")
+        );
+
+        configuration.setAllowedHeaders(List.of("*"));
+
+        configuration.setAllowCredentials(false);
+
+        UrlBasedCorsConfigurationSource source =
+                new UrlBasedCorsConfigurationSource();
+
+        source.registerCorsConfiguration("/**", configuration);
+
+        return source;
+    }
+
+    @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http) throws Exception {
 
         http
+            .cors(cors ->
+                cors.configurationSource(corsConfigurationSource())
+            )
+
             .csrf(csrf -> csrf.disable())
 
             .authorizeHttpRequests(auth -> auth
 
-                // Candidate list is public
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                 .requestMatchers(
                         HttpMethod.GET,
                         "/candidates"
                 ).permitAll()
 
-                // Winner/result is Admin-only
                 .requestMatchers(
                         "/candidates/winner"
                 ).hasRole("ADMIN")
 
-                // Voter login
                 .requestMatchers(
                         "/voters/login"
                 ).permitAll()
 
-                // Voter registration and voting
                 .requestMatchers(
                         HttpMethod.POST,
                         "/voters",
                         "/voters/vote"
                 ).permitAll()
 
-                // Admin-only operations
                 .requestMatchers(
                         "/voters/vote-records",
                         "/voters/reset-election",
                         "/voters/delete-all"
                 ).hasRole("ADMIN")
 
-                // All other endpoints require Admin
                 .anyRequest().hasRole("ADMIN")
             )
 
             .httpBasic(basic -> {})
+
             .formLogin(form -> form.disable());
 
         return http.build();
     }
 }
-
