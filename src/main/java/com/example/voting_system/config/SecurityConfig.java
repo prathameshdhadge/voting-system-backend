@@ -57,7 +57,6 @@ public class SecurityConfig {
         );
 
         configuration.setAllowedHeaders(List.of("*"));
-
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source =
@@ -76,9 +75,7 @@ public class SecurityConfig {
             .cors(cors ->
                 cors.configurationSource(corsConfigurationSource())
             )
-
             .csrf(csrf -> csrf.disable())
-
             .authorizeHttpRequests(auth -> auth
 
                 // Allow browser CORS preflight requests
@@ -90,6 +87,11 @@ public class SecurityConfig {
                 .requestMatchers(
                         HttpMethod.GET, "/candidates"
                 ).permitAll()
+
+                // Only Election Authority can add candidates
+                .requestMatchers(
+                        HttpMethod.POST, "/candidates"
+                ).hasRole("ADMIN")
 
                 // Election Authority only
                 .requestMatchers(
@@ -123,9 +125,7 @@ public class SecurityConfig {
                 // All other requests require Election Authority
                 .anyRequest().hasRole("ADMIN")
             )
-
             .httpBasic(basic -> {})
-
             .formLogin(form -> form.disable());
 
         return http.build();
