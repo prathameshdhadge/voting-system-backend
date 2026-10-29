@@ -19,7 +19,6 @@ import org.springframework.web.bind.annotation.RestController;
 import com.example.voting_system.entity.Candidate;
 import com.example.voting_system.entity.Voter;
 import com.example.voting_system.entity.vote;
-
 import com.example.voting_system.repository.CandidateRepository;
 import com.example.voting_system.repository.VoterRepository;
 import com.example.voting_system.repository.VoteRepository;
@@ -43,10 +42,10 @@ public class VoterController {
         this.voteRepository = voteRepository;
     }
 
-    // Get all voters
+    // Get all voters - Election Authority only
     @GetMapping
-    public List<Voter> getAllVoters() {
-        return voterRepository.findAll();
+    public ResponseEntity<List<Voter>> getAllVoters() {
+        return ResponseEntity.ok(voterRepository.findAll());
     }
 
     // Voter login
@@ -70,16 +69,16 @@ public class VoterController {
         }
 
         if (voter.isHasVoted()) {
-            return ResponseEntity.ok(
-                    "You have already voted.");
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("You have already voted.");
         }
 
         return ResponseEntity.ok(
                 "Login successful. You can vote.");
     }
 
-    // Register voter
-    @PostMapping
+    // Add voter - Election Authority only
+    @PostMapping("/add")
     public ResponseEntity<?> addVoter(
             @RequestBody Voter voter) {
 
@@ -159,7 +158,6 @@ public class VoterController {
         // Save voting history
         vote record = new vote(voter, candidate);
         record.setVotedAt(LocalDateTime.now());
-
         voteRepository.save(record);
 
         // Update candidate vote count
@@ -180,18 +178,18 @@ public class VoterController {
         public Long candidateId;
     }
 
-    // Get all vote records
+    // Get all voting records - Election Authority only
     @GetMapping("/vote-records")
     public List<vote> getAllVoteRecords() {
         return voteRepository.findAll();
     }
 
-    // Reset election: clear votes but keep registered voters
+    // Reset election - Election Authority only
     @Transactional
     @PostMapping("/reset-election")
     public ResponseEntity<String> resetElection() {
 
-        // Delete all voting history
+        // Delete voting history
         voteRepository.deleteAllInBatch();
 
         // Reset candidate vote counts
@@ -213,19 +211,18 @@ public class VoterController {
         voterRepository.saveAll(voters);
 
         return ResponseEntity.ok(
-                "Election reset successfully. All votes have been cleared."
-        );
+                "Election reset successfully. All votes have been cleared.");
     }
 
-    // Delete all voters, voting records and reset candidate votes
+    // Delete all voters - Election Authority only
     @Transactional
     @DeleteMapping("/delete-all")
     public ResponseEntity<String> deleteAllVoters() {
 
-        // Step 1: Delete voting records first
+        // Delete voting history first
         voteRepository.deleteAllInBatch();
 
-        // Step 2: Reset candidate vote counts
+        // Reset candidate vote counts
         List<Candidate> candidates = candidateRepository.findAll();
 
         for (Candidate candidate : candidates) {
@@ -234,12 +231,11 @@ public class VoterController {
 
         candidateRepository.saveAll(candidates);
 
-        // Step 3: Delete all registered voters
+        // Delete registered voters
         voterRepository.deleteAllInBatch();
 
         return ResponseEntity.ok(
-                "All voters and voting records have been deleted successfully."
-        );
+                "All voters and voting records have been deleted successfully.");
     }
 }
 

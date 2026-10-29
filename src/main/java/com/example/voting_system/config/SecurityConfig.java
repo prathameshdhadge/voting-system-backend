@@ -1,4 +1,7 @@
+
 package com.example.voting_system.config;
+
+import java.util.List;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -15,8 +18,6 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
-import java.util.List;
 
 @Configuration
 public class SecurityConfig {
@@ -36,12 +37,12 @@ public class SecurityConfig {
     public UserDetailsService userDetailsService(
             PasswordEncoder passwordEncoder) {
 
-        UserDetails admin = User.withUsername(adminUsername)
+        UserDetails authority = User.withUsername(adminUsername)
                 .password(passwordEncoder.encode(adminPassword))
                 .roles("ADMIN")
                 .build();
 
-        return new InMemoryUserDetailsManager(admin);
+        return new InMemoryUserDetailsManager(authority);
     }
 
     @Bean
@@ -80,33 +81,46 @@ public class SecurityConfig {
 
             .authorizeHttpRequests(auth -> auth
 
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
-
+                // Allow browser CORS preflight requests
                 .requestMatchers(
-                        HttpMethod.GET,
-                        "/candidates"
+                        HttpMethod.OPTIONS, "/**"
                 ).permitAll()
 
+                // Public candidate list for voters
                 .requestMatchers(
-                        "/candidates/winner"
-                ).hasRole("ADMIN")
-
-                .requestMatchers(
-                        "/voters/login"
+                        HttpMethod.GET, "/candidates"
                 ).permitAll()
 
+                // Election Authority only
                 .requestMatchers(
-                        HttpMethod.POST,
-                        "/voters",
-                        "/voters/vote"
-                ).permitAll()
-
-                .requestMatchers(
+                        "/candidates/winner",
                         "/voters/vote-records",
                         "/voters/reset-election",
-                        "/voters/delete-all"
+                        "/voters/delete-all",
+                        "/voters/add"
                 ).hasRole("ADMIN")
 
+                // Voter login
+                .requestMatchers(
+                        HttpMethod.GET, "/voters/login"
+                ).permitAll()
+
+                // Voter can submit a vote
+                .requestMatchers(
+                        HttpMethod.POST, "/voters/vote"
+                ).permitAll()
+
+                // Block public voter registration
+                .requestMatchers(
+                        HttpMethod.POST, "/voters"
+                ).denyAll()
+
+                // Prevent public access to voter list
+                .requestMatchers(
+                        HttpMethod.GET, "/voters"
+                ).hasRole("ADMIN")
+
+                // All other requests require Election Authority
                 .anyRequest().hasRole("ADMIN")
             )
 
@@ -117,3 +131,4 @@ public class SecurityConfig {
         return http.build();
     }
 }
+
