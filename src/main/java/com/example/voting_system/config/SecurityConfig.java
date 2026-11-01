@@ -7,6 +7,8 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+
+import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -15,11 +17,13 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
+
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration
+@EnableMethodSecurity
 public class SecurityConfig {
 
     @Value("${app.admin.username:admin}")
@@ -28,11 +32,13 @@ public class SecurityConfig {
     @Value("${app.admin.password}")
     private String adminPassword;
 
+    // Password Encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
+    // Election Authority User
     @Bean
     public UserDetailsService userDetailsService(
             PasswordEncoder passwordEncoder) {
@@ -45,6 +51,7 @@ public class SecurityConfig {
         return new InMemoryUserDetailsManager(authority);
     }
 
+    // CORS Configuration
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
 
@@ -57,6 +64,7 @@ public class SecurityConfig {
         );
 
         configuration.setAllowedHeaders(List.of("*"));
+
         configuration.setAllowCredentials(false);
 
         UrlBasedCorsConfigurationSource source =
@@ -67,6 +75,7 @@ public class SecurityConfig {
         return source;
     }
 
+    // Security Filter Chain
     @Bean
     public SecurityFilterChain securityFilterChain(
             HttpSecurity http) throws Exception {
@@ -75,25 +84,27 @@ public class SecurityConfig {
             .cors(cors ->
                 cors.configurationSource(corsConfigurationSource())
             )
+
             .csrf(csrf -> csrf.disable())
+
             .authorizeHttpRequests(auth -> auth
 
-                // Allow browser CORS preflight requests
+                // CORS Preflight Requests
                 .requestMatchers(
                         HttpMethod.OPTIONS, "/**"
                 ).permitAll()
 
-                // Public candidate list for voters
+                // Public Candidate List
                 .requestMatchers(
                         HttpMethod.GET, "/candidates"
                 ).permitAll()
 
-                // Only Election Authority can add candidates
+                // Candidate Add - Election Authority Only
                 .requestMatchers(
                         HttpMethod.POST, "/candidates"
                 ).hasRole("ADMIN")
 
-                // Election Authority only
+                // Election Authority Only
                 .requestMatchers(
                         "/candidates/winner",
                         "/voters/vote-records",
@@ -102,30 +113,34 @@ public class SecurityConfig {
                         "/voters/add"
                 ).hasRole("ADMIN")
 
-                // Voter login
+                // Voter Login
                 .requestMatchers(
                         HttpMethod.GET, "/voters/login"
                 ).permitAll()
 
-                // Voter can submit a vote
+                // Voter Vote Submission
                 .requestMatchers(
                         HttpMethod.POST, "/voters/vote"
                 ).permitAll()
 
-                // Block public voter registration
+                // Block Public Voter Registration
                 .requestMatchers(
                         HttpMethod.POST, "/voters"
                 ).denyAll()
 
-                // Prevent public access to voter list
+                // Voter List - Election Authority Only
                 .requestMatchers(
                         HttpMethod.GET, "/voters"
                 ).hasRole("ADMIN")
 
-                // All other requests require Election Authority
+                // All Other Requests - Election Authority Only
                 .anyRequest().hasRole("ADMIN")
             )
+
+            // HTTP Basic Authentication
             .httpBasic(basic -> {})
+
+            // Disable Form Login
             .formLogin(form -> form.disable());
 
         return http.build();
